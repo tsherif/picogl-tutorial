@@ -25,39 +25,47 @@
 <head>
     <script src="picogl.min.js"></script>
     <script src="gl-matrix-min.js"></script>
-    <script src="noise3D.js"></script>
 </head>
 <body>
     <canvas id="webgl-canvas"></canvas>
-    <script type="x-shader/vs" id="vertex-shader">
-        #version 300 es
+<script type="shader/vertex" id="vertex-shader">
+    #version 300 es
+ 
+    layout(location=0) in vec4 position;
+ 
+    out vec2 vUV;
+    void main() {
+        vUV = position.xy * 0.5 + 0.5;
+        gl_Position = position;
+    }
+</script>
+<script type="shader/fragment" id="fragment-shader-mrt">
+    #version 300 es
+    precision highp float;
+ 
+    layout(location=0) out vec4 fragColor1;
+    layout(location=1) out vec4 fragColor2;
+    void main() {
+        fragColor1 = vec4(1.0, 0.0, 0.0, 1.0);
+        fragColor2 = vec4(0.0, 0.0, 1.0, 1.0);
+    }
+</script>
+<script type="shader/fragment" id="fragment-shader-blend">
+    #version 300 es
+    precision highp float;
+ 
+    in vec2 vUV;
 
-        layout(location=0) in vec4 position;
-        
-        uniform mat4 uMVP;
-        
-        out vec3 vUV;
-        void main() {
-            vUV = position.xyz + 0.5;
-            gl_Position = uMVP * position;
-            gl_PointSize = 2.0;
-        }
-    </script>
-    <script type="x-shader/vf" id="fragment-shader">
-        #version 300 es
-        precision highp float;
-        precision lowp sampler3D;
-
-        in vec3 vUV;
-
-        uniform sampler3D tex;
-
-        out vec4 fragColor;
-        void main() {
-            float alpha = texture(tex, vUV).r * 0.03;
-            fragColor = vec4(vUV * alpha, alpha);
-        }
-    </script>
+    uniform sampler2D texture1;
+    uniform sampler2D texture2;
+ 
+    out vec4 fragColor;
+    void main() {
+        vec4 color1 = texture(texture1, vUV);
+        vec4 color2 = texture(texture2, vUV);
+        fragColor = mix(color1, color2, vUV.x);
+    }
+</script>
     <script>
         var canvas = document.getElementById("webgl-canvas");
         canvas.width = window.innerWidth;
@@ -66,93 +74,51 @@
         var gl = canvas.getContext("webgl2");
 
         var app = PicoGL.createApp(canvas)
-        .clearColor(0, 0, 0, 1)
-        .blend()
-        .blendFunc(PicoGL.ONE, PicoGL.ONE_MINUS_SRC_ALPHA);
+        .clearColor(0, 0, 0, 1);
 
         var vSource = document.getElementById("vertex-shader").text.trim();
-        var fSource = document.getElementById("fragment-shader").text.trim();
-        var program = app.createProgram(vSource, fSource);
+        var vertexShader = app.createShader(PicoGL.VERTEX_SHADER, vSource);
 
-        var DIMENSIONS = 128;
-        var INCREMENT = 1 / DIMENSIONS;
+        var fSourceMRT = document.getElementById("fragment-shader-mrt").text.trim();
+        var programMRT = app.createProgram(vertexShader, fSourceMRT);
 
-        var positionData = new Float32Array(DIMENSIONS * DIMENSIONS * DIMENSIONS * 3);
+        var fSourceBlend = document.getElementById("fragment-shader-blend").text.trim();
+        var programBlend = app.createProgram(vertexShader, fSourceBlend);
 
-        var positionIndex = 0;
-        var x = -0.5;
-        for (var i = 0; i < DIMENSIONS; ++i) {
-            var y = -0.5;
-            for (var j = 0; j < DIMENSIONS; ++j) {
-                var z = -0.5;
-                for (var k = 0; k < DIMENSIONS; ++k) {
-                    positionData[positionIndex++] = x;
-                    positionData[positionIndex++] = y;
-                    positionData[positionIndex++] = z;
-                    z += INCREMENT;
-                }
-                y += INCREMENT;
-            }
-            x += INCREMENT;
-        }
+        var triangePositions = app.createVertexBuffer(PicoGL.FLOAT, 2, new Float32Array([
+             -0.5, -0.5,
+             0.5, -0.5,
+             0.0, 0.5
+        ]));
 
-        var positions = app.createVertexBuffer(PicoGL.FLOAT, 3, positionData)
+        var triangleArray = app.createVertexArray()
+        .attributeBuffer(0, triangePositions);
 
-        var cloudArray = app.createVertexArray()
-        .attributeBuffer(0, positions);
+        var quadPositions = app.createVertexBuffer(PicoGL.FLOAT, 2, new Float32Array([
+             -1.0, 1.0,
+             -1.0, -1.0,
+             1.0, -1.0,
+             -1.0, 1.0,
+             1.0, -1.0,
+             1.0, 1.0
+        ]));
 
-        var TEXTURE_DIMENSIONS = 16;
-        var textureData = new Uint8Array(TEXTURE_DIMENSIONS * TEXTURE_DIMENSIONS * TEXTURE_DIMENSIONS);
-        var textureIndex = 0;
-        for (var i = 0; i < TEXTURE_DIMENSIONS; ++i) {
-            for (var j = 0; j < TEXTURE_DIMENSIONS; ++j) {
-                for (var k = 0; k < TEXTURE_DIMENSIONS; ++k) {
-                    var val = snoise([i, j, k]) * 255
-                    textureData[textureIndex++] = val;
-                }
-            }
-        }
+        var quadArray = app.createVertexArray()
+        .attributeBuffer(0, quadPositions);
 
-        var texture = app.createTexture3D(textureData, TEXTURE_DIMENSIONS, TEXTURE_DIMENSIONS, TEXTURE_DIMENSIONS, {
-            format: PicoGL.RED
-        });
+        var framebuffer = app.createFramebuffer()
+        .colorTarget(0)
+        .colorTarget(1);
 
-        var projMatrix = mat4.create();
-        mat4.perspective(projMatrix, Math.PI / 2, app.width / app.height, 0.1, 10.0);
+        var drawCallMRT = app.createDrawCall(programMRT, triangleArray);
+        var drawCallBlend = app.createDrawCall(programBlend, quadArray)
+        .texture("texture1", framebuffer.colorTextures[0])
+        .texture("texture2", framebuffer.colorTextures[1]);
+         
+        app.drawFramebuffer(framebuffer).clear();
+        drawCallMRT.draw();
 
-        var viewMatrix = mat4.create();
-        mat4.lookAt(viewMatrix, vec3.fromValues(1, 1, 1), vec3.fromValues(0, 0, 0), vec3.fromValues(0, 1, 0))
-
-        var viewProjMatrix = mat4.create();
-        mat4.multiply(viewProjMatrix, projMatrix, viewMatrix);
-
-        var mvpMatrix = mat4.create();
-        var modelMatrix = mat4.create();
-        var rotateXMatrix = mat4.create();
-        var rotateYMatrix = mat4.create();
-
-        var angleX = 0;
-        var angleY = 0;
-
-        var drawCall = app.createDrawCall(program, cloudArray, PicoGL.POINTS)
-        .texture("tex", texture);
-
-        function draw() {
-            angleX += 0.01;
-            angleY += 0.02;
-
-            mat4.fromXRotation(rotateXMatrix, angleX);
-            mat4.fromYRotation(rotateYMatrix, angleY);
-            mat4.multiply(modelMatrix, rotateXMatrix, rotateYMatrix);
-            mat4.multiply(mvpMatrix, viewProjMatrix, modelMatrix);
-
-            app.clear();
-            drawCall.uniform("uMVP", mvpMatrix).draw();
-
-            requestAnimationFrame(draw);
-        }
-
-        requestAnimationFrame(draw);
-        
+        app.defaultDrawFramebuffer().clear();
+        drawCallBlend.draw();
     </script>
 </body>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<!--
+  The MIT License (MIT)
+
+  Copyright (c) 2017 Tarek Sherif
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of
+  this software and associated documentation files (the "Software"), to deal in
+  the Software without restriction, including without limitation the rights to
+  use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+  the Software, and to permit persons to whom the Software is furnished to do so,
+  subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+  FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+  COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+  IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+<html>
+<head>
+    <script src="gl-matrix-min.js"></script>
+    <script src="picogl.min.js"></script>
+</head>
+<body>
+    <canvas id="webgl-canvas"></canvas>
+    <script type="shader/vertex" id="vertex-shader">
+        #version 300 es
+
+        layout(location=0) in vec3 aPosition;
+        layout(location=1) in vec3 aVelocity;
+        layout(location=2) in vec3 aColor;
+
+        layout(std140) uniform Mass {
+            vec4 mass1Position;
+            vec4 mass2Position;
+            vec4 mass3Position;
+            float mass1Factor;
+            float mass2Factor;
+            float mass3Factor;
+        };
+    
+        out vec3 tfPosition;
+        out vec3 tfVelocity;
+        out vec3 vColor;
+        void main() {
+            vec3 position = aPosition;
+            vec3 velocity = aVelocity;
+
+            vec3 massVec = mass1Position.xyz - position;
+            float massDist2 = max(0.01, dot(massVec, massVec));
+            vec3 acceleration = mass1Factor * normalize(massVec) / massDist2;
+
+            massVec = mass2Position.xyz - position;
+            massDist2 = max(0.01, dot(massVec, massVec));
+            acceleration += mass2Factor * normalize(massVec) / massDist2;
+
+            massVec = mass3Position.xyz - position;
+            massDist2 = max(0.01, dot(massVec, massVec));
+            acceleration += mass3Factor * normalize(massVec) / massDist2;
+
+            velocity += acceleration;
+            position += velocity;
+
+            tfPosition = position;
+            tfVelocity = velocity;
+
+            vColor = aColor;
+            gl_PointSize = 2.0;
+            gl_Position = vec4(position, 1.0);
+        }
+    </script>
+    <script type="shader/fragment" id="fragment-shader">
+        #version 300 es
+        precision highp float;
+
+        in vec3 vColor;
+
+        out vec4 fragColor;
+        void main() {
+            float alpha = 0.3;
+            fragColor = vec4(vColor * alpha, alpha);
+        }
+    </script>
+    <script>
+        var canvas = document.getElementById("webgl-canvas");
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        var app = PicoGL.createApp(canvas)
+        .clearColor(0.0, 0.0, 0.0, 1.0)
+        .blend()
+        .blendFunc(PicoGL.ONE, PicoGL.ONE_MINUS_SRC_ALPHA);
+
+        var vsSource = document.getElementById("vertex-shader").text.trim();
+        var fsSource = document.getElementById("fragment-shader").text.trim();
+        var program = app.createProgram(vsSource, fsSource, ["tfPosition", "tfVelocity"]);
+
+        var NUM_PARTICLES = 200000;
+        var positionData = new Float32Array(NUM_PARTICLES * 3);
+        var colorData = new Float32Array(NUM_PARTICLES * 3);
+
+        for (var i = 0; i < NUM_PARTICLES; ++i) {
+            var vec3i = i * 3;
+
+            positionData[vec3i] = Math.random() * 2 - 1;
+            positionData[vec3i + 1] = Math.random() * 2 - 1;
+            positionData[vec3i + 2] = Math.random() * 2 - 1;
+
+            colorData[vec3i] = Math.random();
+            colorData[vec3i + 1] = Math.random();
+            colorData[vec3i + 2] = Math.random();
+        }
+
+        var positionsA = app.createVertexBuffer(PicoGL.FLOAT, 3, positionData);
+        var velocitiesA = app.createVertexBuffer(PicoGL.FLOAT, 3, positionData.length);
+        var positionsB = app.createVertexBuffer(PicoGL.FLOAT, 3, positionData.length);
+        var velocitiesB = app.createVertexBuffer(PicoGL.FLOAT, 3, positionData.length);
+
+        var colors = app.createVertexBuffer(PicoGL.FLOAT, 3, colorData);
+
+        var vertexArrayA = app.createVertexArray()
+        .attributeBuffer(0, positionsA)
+        .attributeBuffer(1, velocitiesA)
+        .attributeBuffer(2, colors);
+
+        var vertexArrayB = app.createVertexArray()
+        .attributeBuffer(0, positionsB)
+        .attributeBuffer(1, velocitiesB)
+        .attributeBuffer(2, colors);
+
+        var transformFeedbackA = app.createTransformFeedback()
+        .feedbackBuffer(0, positionsA)
+        .feedbackBuffer(1, velocitiesA);
+
+        var transformFeedbackB = app.createTransformFeedback()
+        .feedbackBuffer(0, positionsB)
+        .feedbackBuffer(1, velocitiesB);
+
+        var massUniforms = app.createUniformBuffer([
+            PicoGL.FLOAT_VEC4,
+            PicoGL.FLOAT_VEC4,
+            PicoGL.FLOAT_VEC4,
+            PicoGL.FLOAT,
+            PicoGL.FLOAT,
+            PicoGL.FLOAT
+        ]).set(0, vec3.fromValues(
+            Math.random() * 2.0 - 1.0,
+            Math.random() * 2.0 - 1.0,
+            Math.random() * 2.0 - 1.0
+        )).set(1, vec3.fromValues(
+            Math.random() * 2.0 - 1.0,
+            Math.random() * 2.0 - 1.0,
+            Math.random() * 2.0 - 1.0
+        )).set(2, vec3.fromValues(
+            Math.random() * 2.0 - 1.0,
+            Math.random() * 2.0 - 1.0,
+            Math.random() * 2.0 - 1.0
+        ))
+        .set(3, Math.random() / 30000)
+        .set(4, Math.random() / 30000)
+        .set(5, Math.random() / 30000)
+        .update();
+
+        var drawCallA = app.createDrawCall(program, vertexArrayA, PicoGL.POINTS)
+        .transformFeedback(transformFeedbackB)
+        .uniformBlock("Mass", massUniforms);
+
+        var drawCallB = app.createDrawCall(program, vertexArrayB, PicoGL.POINTS)
+        .transformFeedback(transformFeedbackA)
+        .uniformBlock("Mass", massUniforms);
+
+        var currentDrawCall = drawCallA;
+        function draw() {      
+            app.clear();
+            currentDrawCall.draw();
+
+            currentDrawCall = currentDrawCall === drawCallA ? drawCallB : drawCallA;
+
+            requestAnimationFrame(draw);
+        }
+
+        requestAnimationFrame(draw);
+            
+
+    </script>
+</body>
+</html>

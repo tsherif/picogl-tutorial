@@ -90,12 +90,12 @@
         ]));
 
         var triangleArrayA = app.createVertexArray()
-        .attributeBuffer(0, positionsA)
-        .attributeBuffer(1, colors);
+        .vertexAttributeBuffer(0, positionsA)
+        .vertexAttributeBuffer(1, colors);
 
         var triangleArrayB = app.createVertexArray()
-        .attributeBuffer(0, positionsB)
-        .attributeBuffer(1, colors);
+        .vertexAttributeBuffer(0, positionsB)
+        .vertexAttributeBuffer(1, colors);
 
         var transformFeedbackA = app.createTransformFeedback()
         .feedbackBuffer(0, positionsA);

@@ -78,8 +78,8 @@
         ]));
 
         var triangleArray = app.createVertexArray()
-        .attributeBuffer(0, positions)
-        .attributeBuffer(1, colors);
+        .vertexAttributeBuffer(0, positions)
+        .vertexAttributeBuffer(1, colors);
 
         var drawCall = app.createDrawCall(program, triangleArray);
          

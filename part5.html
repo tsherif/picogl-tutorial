@@ -124,14 +124,14 @@
         var colors = app.createVertexBuffer(PicoGL.FLOAT, 3, colorData);
 
         var vertexArrayA = app.createVertexArray()
-        .attributeBuffer(0, positionsA)
-        .attributeBuffer(1, velocitiesA)
-        .attributeBuffer(2, colors);
+        .vertexAttributeBuffer(0, positionsA)
+        .vertexAttributeBuffer(1, velocitiesA)
+        .vertexAttributeBuffer(2, colors);
 
         var vertexArrayB = app.createVertexArray()
-        .attributeBuffer(0, positionsB)
-        .attributeBuffer(1, velocitiesB)
-        .attributeBuffer(2, colors);
+        .vertexAttributeBuffer(0, positionsB)
+        .vertexAttributeBuffer(1, velocitiesB)
+        .vertexAttributeBuffer(2, colors);
 
         var transformFeedbackA = app.createTransformFeedback()
         .feedbackBuffer(0, positionsA)

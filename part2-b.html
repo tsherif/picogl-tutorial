@@ -106,9 +106,12 @@
         var quadArray = app.createVertexArray()
         .vertexAttributeBuffer(0, quadPositions);
 
+        var colorTarget1 = app.createTexture2D(app.width, app.height);
+        var colorTarget2 = app.createTexture2D(app.width, app.height);
+
         var framebuffer = app.createFramebuffer()
-        .colorTarget(0)
-        .colorTarget(1);
+        .colorTarget(0, colorTarget1)
+        .colorTarget(1, colorTarget2);
 
         var drawCallMRT = app.createDrawCall(programMRT, triangleArray);
         var drawCallBlend = app.createDrawCall(programBlend, quadArray)
